@@ -1,0 +1,256 @@
+---
+title: "Cross-validation"
+output: html_notebook
+---
+# 1. Validtion set Approach 
+[출처](https://smlee729.github.io/r/machine%20learning/2015/03/17/1-validation-set-approach.html)  
+머신러닝은 단순히 training data에 대해서만 최적화 하는것이 아니기 때문에 반드시 test data에 대한 성능이 중요  
+test 데이터가 항상 있는것은 아니기 때문에 trainin data를 쪼개 test data로 사용  
+  
+가장 간단한 validation set approach
+
+```{r eval=FALSE}
+# Auto 데이터를 사용하기 위한 패키지 
+if(!require(ISLR)){
+  install.packages("ISLR")
+}
+library(ISLR)
+ 
+```
+
+우선 train dataset과 test dataset을 나눠준다. 
+
+```{r}
+# random의 seed를 임의의 자연수로 설정함으로써,
+# 실험때마다 동일한 난수 패턴을 얻음
+set.seed(1)
+
+# 1 ~ 392 중 196개의 수를 임으로 뽑는다.
+train <- sample(392, 192)
+head(train)
+```
+
+뽑힌 임의의 수 를 index로 활용하여 linear model 생성
+
+```{r}
+lm.fit <- lm(mpg~horsepower, data = Auto, subset = train)
+# 만들어진 선형모델을 바탕으로 test data에서 예측 
+# train은 "train에 포함한 index를 제외한"이라는 의미 = test index 
+```
+
+**MSE(Mean Squared Error)**를 구하자.
+
+```{r}
+mean((Auto$mpg-predict(lm.fit, Auto))[-train]^2)
+# 원본 Auto 데이터셋의 mpg항목에서 예측된 mpg를 뺀 값의
+# train index를 제외한 부분의 제곱의 평균을 구한다. 
+```
+
+ploy function
+직교 벡터를 생성하는데 사용  
+계수의 중요성을 해석하는데 도움을 준다.  
+회귀분석에서 공변량으로 간주하기 위해 수식에서 하나의 매개변수를 수정하려면 I()함수를 사용해야한다.
+```{r}
+# poly function example
+q <- 1:11
+v <- c(3,5,7,9.2,14,20,26,34,50,59,80)
+model_1 <- lm(v~poly(q,2))
+model_1.1 <- lm(v~1+q+q^2)
+model_2 <- lm(v~1+q+I(q^2))
+
+
+print(predict(model_1))
+
+print(predict(model_1.1))
+
+print(predict(model_2))
+
+```
+
+```{r}
+lm.fit2 <- lm(mpg~poly(horsepower, 2), data = Auto, subset = train)
+lm.fit3 <- lm.fit3 <-lm(mpg~poly(horsepower,3), data=Auto, subset=train)
+mean((Auto$mpg - predict(lm.fit2, Auto))[-train]^2)
+mean((Auto$mpg-predict(lm.fit3,Auto))[-train]^2)
+```
+
+결과를 보면 3차함수의 test MSE가 2차 함수를 fitting 했을때 보다 조금 높게 나온다.  
+
+seed값을 변경하고 다시 해보자.  
+
+```{r}
+set.seed(4)
+
+train <- sample(392, 192)
+
+lm.fit <- lm(mpg~horsepower, data = Auto, subset = train)
+lm.fit2 <- lm(mpg~poly(horsepower, 2), data = Auto, subset = train)
+lm.fit3 <- lm(mpg~poly(horsepower,3), data=Auto, subset=train)
+
+mean((Auto$mpg-predict(lm.fit, Auto))[-train]^2)
+mean((Auto$mpg - predict(lm.fit2, Auto))[-train]^2)
+mean((Auto$mpg-predict(lm.fit3,Auto))[-train]^2)
+```
+
+이번에는 3차함수를 fiiting 해을 때가 MSE가 더 낮게 나왔다. 하지만 1차 함수들 보다 2차나 3차함수가 MSE가 낮은 것은 일관되었다  
+
+### 결론 : validation set approach는 간단하고 계산이 빠르지만, 정교한 model 비교는 힘들다.
+
+# 2. Leave-One-Out Cross-Validation 
+[출처](https://smlee729.github.io/r/machine%20learning/2015/03/19/1-loocv.html)  
+1번(Validation Set Approach)의 가장 큰 단점인 매번 다른 random set을 뽑을 때 마다 그 결과가 달라질 수 있다는 점이다.  
+LOOCV는 샘플의 수(N) 만큼의 모델을 만들고 각 모델을 만들 때, 하나의 샘플만을 제외한 샘플로 test set performance를 계산한다.  
+N개의 performance에 대해 평균을 낸다.  
+  
+### 장점 
+모든 샘플에 대해 test하기 때문에 stable한 결과를 얻을수 있음  
+
+### 단점
+1. 연산시간이 매우 오래걸린다.
+2. k-fold CV에 비해 모델의 다양성 포함하기 힘들다.
+
+```{r}
+# Auto 데이터를 활용하기 위한 패키지
+if(!require(ISLR)){
+  install.packages("ISLR")
+}
+library(ISLR)
+
+attach(Auto)
+
+# cv.glm을 사용하기 위한 라이브러리
+if(!require(boot)){
+  install.packages("boot")
+}
+library(boot)
+
+```
+
+mpg : y, horsepower : x로 간주하고 liner regression 적합  
+cv.glm 함수를 통해 LOOCV 실행  
+파라미터를 지정해 주지 않으면 디폴트 값 K = 1로 진행
+```{r}
+# mpg를 horsepower에 대해 liner regression
+myglm.fit <- glm(mpg~horsepower, data = Auto)
+
+cv.err = cv.glm(Auto, myglm.fit)
+# cv.glm 함수를 통해 LOOCV를 실행
+# delta : crosss-validation 결과를 가짐
+cv.err$delta
+```
+
+### linear model, polynomial model에 한해서 간단하게 LOOCV를 사용 가능
+
+lm.influence
+이 함수는 회귀 적합치 품질을 확인하기 위해 다양한 진단 방법을 형성하는 데 사용되는 기본량을 제공한다.
+
+```{r}
+loocv = function(fit){
+  h = lm.influence(fit)$h
+  mean((residuals(fit)/(1-h))^2)
+}
+
+loocv(myglm.fit)
+
+cv.error = rep(0,5)
+degree = 1:5 # 1~5차 함수 fitting
+for(d in degree){
+  glm.fit <- glm(mpg~poly(horsepower, d))
+  # poly 함수를 이용해 d차 함수를 fit
+  cv.error[d] = loocv(glm.fit)
+  # LOOCV 결과를 각 벡터에 저장
+}
+```
+
+그래프 확인시 5차함수가 가장 낮은 LOOCV error를 가짐을 알 수 있다.  
+2~4차 함수중 2차가 가장 잘 fit된 것임을 확인 가능하다.  
+
+```{r}
+plot(degree, cv.error, type = 'b')
+```
+
+# 3. k-fold Cross-Validation 
+[출처](https://smlee729.github.io/r/machine%20learning/2015/03/19/2-k-fold-cv.html)  
+k-fold CV는 데이터셋을 k 개의 같은 크기로 나눈 다음 하나의 부분식을 test set으로 사용, k 개의 test performance를 평균내는 것을 의미한다.  
+이를 수식으로 나타내면,
+
+$$CV_{k}= {1 \over k}\sum_{i=1}^{k} MSE_{i}$$
+
+### 장점
+1. LOOCV비해 계산속도가 빠르다.
+1. validation set approach보단 더 안정적인 test error 생성 가능
+
+일반적으로 5-fold나 10-fold를 사용
+
+```{r}
+if(!require(ISLR)){
+  install.packages("ISLR")
+}
+library(ISLR)
+
+if(!require(boot)){
+  install.packages("boot")
+}
+library(boot) # cv.glm을 위한 라이브러리
+```
+
+cv.glm 함수 내에 k라는 인자를 건들지 않으면 자동적으로 LOOCV로 계산  
+k 값을 바꿔준다면 k-fold CV를 계산  
+
+### 5-fold CV 1~5차 함수로 fiiting
+```{r}
+degree <- 1:5
+cv.error5 <- rep(0,5)
+for(d in degree){
+  glm.fit <- glm(mpg ~ poly(horsepower, d), data = Auto)
+  cv.error5[d] <- cv.glm(Auto, glm.fit, K = 5)$delta[1]
+}
+
+```
+계산이 훨씬 빠름을 확인 가능
+
+### 10-fold CV 1~5파 함수로 fitting
+```{r}
+cv.error10 <- rep(0,5)
+for(d in degree){
+  glm.fit <- glm(mpg~poly(horsepower, d), data=Auto)
+  cv.error10[d] <- cv.glm(Auto, glm.fit, K=10)$delta[1]
+}
+```
+
+### LOOCV, 5-fold, 10-fold 비교
+
+```{r}
+loocv <- function(fit){
+  h <- lm.influence(fit)$h
+  mean((residuals(fit)/(1-h))^2)
+}
+
+cv.error = rep(0,5)
+for(d in degree){
+  glm.fit <- glm(mpg~poly(horsepower, d), data = Auto)
+  cv.error[d] <- loocv(glm.fit)
+}
+
+# plot
+plot(degree, cv.error5, type = "b", col = "blue", ylab = "CV Error")
+lines(degree, cv.error10, type = "b", col = "red")
+lines(degree, cv.error, type = "b")
+
+# legend를 활용해 범례 생성
+legend("topright", c("5-fold CV", "10-fold CV", "LOOCV"), pch = 1, col = c('blue', 'red', 'black') )
+```
+LOOCV는 randomness가 없어서 동일한 결과 생성  
+k-fold CV는 K값이 작을수록 할 때 마다 변동 커짐  
+
+### 결론
+변동이 있음에도 k-fold를 활용하는 이유는 계산속도 뿐만아니라,
+training data간의 상관관계가 높은 LOOCV는 overfitting 문제가 발생될 수 있기 때문이다. 
+
+
+
+
+```{r}
+plot(cars)
+```
+.
