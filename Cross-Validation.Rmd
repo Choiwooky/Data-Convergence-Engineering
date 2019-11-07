@@ -248,9 +248,3 @@ k-fold CV는 K값이 작을수록 할 때 마다 변동 커짐
 training data간의 상관관계가 높은 LOOCV는 overfitting 문제가 발생될 수 있기 때문이다. 
 
 
-
-
-```{r}
-plot(cars)
-```
-.
